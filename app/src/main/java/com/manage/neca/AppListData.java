@@ -2,11 +2,12 @@ package com.manage.neca;
 
 import android.graphics.drawable.Drawable;
 import android.net.TrafficStats;
+import android.support.annotation.NonNull;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class AppListData {
+public class AppListData implements Comparable {
     public List<AppListData> alist = new ArrayList<>();
     int app_uid;
     int app_img;
@@ -82,5 +83,18 @@ public class AppListData {
         temp.setTxTraffic(tx);
 
         alist.add(temp);
+    }
+
+    @Override
+    public int compareTo(@NonNull Object o) {
+        long total = rxTraffic+txTraffic;
+        AppListData temp = (AppListData) o;
+        if(total > temp.rxTraffic+temp.txTraffic) {
+            return -1;
+        } else if(total < temp.rxTraffic+temp.txTraffic) {
+            return 1;
+        } else {
+            return 0;
+        }
     }
 }

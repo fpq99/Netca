@@ -40,9 +40,21 @@ public class AppListViewHolder extends RecyclerView.ViewHolder {
 
 
         dataper.setClickable(false);
-        int pro = (int)(traffic / (MainActivity.total_Rtraffic + MainActivity.total_Ttraffic) * 1000.0f);
+        double pro = (int)(traffic / (MainActivity.total_Rtraffic + MainActivity.total_Ttraffic) * 100.0f);
         Log.v("pro", pro+"");
-        dataper.setProgress(pro);
-        datatext.setText( String.format("%.2f", (traffic / 1024.0f) / 1024.0f) );
+        dataper.setProgress((int)pro);
+        datatext.setText( getDataFormat(traffic) );
+    }
+
+    public String getDataFormat(long data) {
+        if(data > 1024) {
+            if(data > 1048576) {
+                return String.format("%.2f", (((data) / 1024.0f) / 1024.0f))+" MB";
+            } else {
+                return String.format("%.2f", ((data) / 1024.0f))+" KB";
+            }
+        } else {
+            return data+" B";
+        }
     }
 }

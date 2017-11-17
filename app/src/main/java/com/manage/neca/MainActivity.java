@@ -5,23 +5,33 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.TrafficStats;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.DefaultItemAnimator;
 import android.support.v7.widget.Toolbar;
+import android.text.format.DateFormat;
 import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
 
+import java.lang.reflect.Array;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 
 import cn.iwgang.familiarrecyclerview.FamiliarRecyclerView;
 import cn.iwgang.familiarrecyclerview.FamiliarRefreshRecyclerView;
+
+import static android.os.SystemClock.elapsedRealtime;
+import static java.lang.System.currentTimeMillis;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -55,8 +65,13 @@ public class MainActivity extends AppCompatActivity {
         total_Rtraffic = TrafficStats.getTotalRxBytes();
         total_Ttraffic = TrafficStats.getTotalTxBytes();
 
-        String s = "폰이 켜진 후 총 데이터 사용량 - \n다운로드: "+
-                String.format("%.2f", (((total_Rtraffic) / 1024.0f) / 1024.0f))+"mb\n업로드: "+String.format("%.2f", (((total_Ttraffic) / 1024.0f) / 1024.0f))+"mb";
+        long time = System.currentTimeMillis() - elapsedRealtime();
+        String format = DateFormat.getBestDateTimePattern(Locale.KOREA, "MM/dd/yyyy hh:mm aa");
+        SimpleDateFormat dateFormat = new SimpleDateFormat(format);
+
+        String s = "폰이 켜진 후 총 데이터 사용량 \n다운로드: "+
+                getDataFormat(total_Rtraffic)+"\n업로드: "+getDataFormat(total_Ttraffic)+"\n수집 시작 시간: "+
+                dateFormat.format(new Date(time));
         ((TextView)findViewById(R.id.textView2)).setText(s);
 
         adata = new AppListData();
@@ -79,7 +94,9 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }
+        Collections.sort(adata.alist);
         adapter = new AppListAdapter(getApplicationContext(), adata);
+        adapter.notifyDataSetChanged();
         recyclerview.setAdapter(adapter);
 
 
@@ -91,6 +108,18 @@ public class MainActivity extends AppCompatActivity {
                         .setAction("Action", null).show();
             }
         });
+    }
+
+    public String getDataFormat(long data) {
+        if(data > 1024) {
+            if(data > 1048576) {
+                return String.format("%.2f", (((data) / 1024.0f) / 1024.0f))+" MB";
+            } else {
+                return String.format("%.2f", ((data) / 1024.0f))+" KB";
+            }
+        } else {
+            return data+" B";
+        }
     }
 
     @Override
