@@ -1,22 +1,34 @@
 package com.manage.neca;
 
+import android.app.AppOpsManager;
+import android.app.usage.NetworkStats;
+import android.app.usage.NetworkStatsManager;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.net.ConnectivityManager;
 import android.net.TrafficStats;
 import android.os.Bundle;
+import android.os.RemoteException;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.DefaultItemAnimator;
 import android.support.v7.widget.Toolbar;
+import android.telephony.TelephonyManager;
 import android.text.format.DateFormat;
 import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.lang.reflect.Array;
 import java.text.SimpleDateFormat;
@@ -30,7 +42,11 @@ import java.util.Locale;
 import cn.iwgang.familiarrecyclerview.FamiliarRecyclerView;
 import cn.iwgang.familiarrecyclerview.FamiliarRefreshRecyclerView;
 
+import static android.app.AppOpsManager.MODE_ALLOWED;
+import static android.app.AppOpsManager.OPSTR_GET_USAGE_STATS;
+import static android.os.Process.myUid;
 import static android.os.SystemClock.elapsedRealtime;
+import static java.lang.Process.*;
 import static java.lang.System.currentTimeMillis;
 
 public class MainActivity extends AppCompatActivity {
@@ -40,9 +56,14 @@ public class MainActivity extends AppCompatActivity {
 
     public static long total_Rtraffic;
     public static long total_Ttraffic;
+    public static long mobile_Rtraffic;
+    public static long mobile_Ttraffic;
+
+    BroadcastReceiver receiver;
 
     AppListData adata;
     AppListAdapter adapter;
+    int flag = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,6 +71,41 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+
+        if(checkForPermission()) {
+            Toast.makeText(getApplicationContext(), "get permission", Toast.LENGTH_LONG).show();
+
+            TelephonyManager tmanager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+            String subscriberId = tmanager.getSubscriberId();
+
+            long hi = System.currentTimeMillis()-(1209600000*3);
+            Log.d("current time", System.currentTimeMillis()+"");
+
+            NetworkStatsManager manager = (NetworkStatsManager)getSystemService(Context.NETWORK_STATS_SERVICE);
+            try {
+                NetworkStats stats =  manager.queryDetailsForUid(ConnectivityManager.TYPE_MOBILE, subscriberId, hi, System.currentTimeMillis(),10610);
+                Log.d("String man", stats.toString());
+                NetworkStats.Bucket bucket = new NetworkStats.Bucket();
+                if(stats.getNextBucket(bucket)) {
+                    Log.d("DATA", "다운로드: "+getDataFormat(bucket.getRxBytes())+"["+bucket.getRxBytes()+"], 업로드: "+getDataFormat(bucket.getTxBytes())+" - "+bucket.getUid()+":::"+new Date(bucket.getStartTimeStamp()).toString());
+                }
+                stats = manager.querySummary(ConnectivityManager.TYPE_WIFI, subscriberId, hi, System.currentTimeMillis());
+                while(stats.hasNextBucket()) {
+                    if(stats.getNextBucket(bucket)) {
+                        if(bucket.getUid() == 10610) {
+                            Log.d("DATA WIFI", "다운로드: "+getDataFormat(bucket.getRxBytes())+", 업로드: "+getDataFormat(bucket.getTxBytes())+" - "+bucket.getUid()+":::"+new Date(bucket.getStartTimeStamp()).toString());
+                            break;
+                        }
+                    }
+                }
+            } catch(RemoteException e) {
+                Log.e("NETWORK ERROR", e.getMessage());
+            }
+        } else {
+            Toast.makeText(getApplicationContext(), "no permission", Toast.LENGTH_LONG).show();
+            Intent intent = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
+            startActivity(intent);
+        }
 
         app_list = (FamiliarRefreshRecyclerView) findViewById(R.id.app_data_list);
 
@@ -64,14 +120,18 @@ public class MainActivity extends AppCompatActivity {
 
         total_Rtraffic = TrafficStats.getTotalRxBytes();
         total_Ttraffic = TrafficStats.getTotalTxBytes();
+        mobile_Rtraffic = TrafficStats.getMobileRxBytes();
+        mobile_Ttraffic = TrafficStats.getMobileTxBytes();
+
 
         long time = System.currentTimeMillis() - elapsedRealtime();
         String format = DateFormat.getBestDateTimePattern(Locale.KOREA, "MM/dd/yyyy hh:mm aa");
         SimpleDateFormat dateFormat = new SimpleDateFormat(format);
 
         String s = "폰이 켜진 후 총 데이터 사용량 \n다운로드: "+
-                getDataFormat(total_Rtraffic)+"\n업로드: "+getDataFormat(total_Ttraffic)+"\n수집 시작 시간: "+
-                dateFormat.format(new Date(time));
+                getDataFormat(total_Rtraffic)+"\n업로드: "+getDataFormat(total_Ttraffic)+
+                "\n모바일 다운로드: "+getDataFormat(mobile_Rtraffic)+"\n업로드: "+getDataFormat(mobile_Ttraffic)+
+                "\n수집 시작 시간: "+dateFormat.format(new Date(time));
         ((TextView)findViewById(R.id.textView2)).setText(s);
 
         adata = new AppListData();
@@ -86,6 +146,8 @@ public class MainActivity extends AppCompatActivity {
                 double rx = (TrafficStats.getUidRxBytes(appInfo.uid) / 1024.0f) / 1024.0f;
                 double tx = (TrafficStats.getUidTxBytes(appInfo.uid) / 1024.0f) / 1024.0f;
 
+                Log.d("appinfoman", appInfo.uid+": "+appInfo.loadLabel(pm)+" - "+rx);
+
                 //long uidTraffic =  rx + tx;
                 if(rx > 0 || tx > 0) {
                     adata.addAppListData(appInfo.uid, appInfo.icon, String.valueOf(appInfo.loadLabel(pm)), TrafficStats.getUidRxBytes(appInfo.uid), TrafficStats.getUidTxBytes(appInfo.uid));
@@ -99,6 +161,26 @@ public class MainActivity extends AppCompatActivity {
         adapter.notifyDataSetChanged();
         recyclerview.setAdapter(adapter);
 
+        IntentFilter filter = new IntentFilter();
+        filter.addAction("android.intent.action.SCREEN_OFF");
+        filter.addAction("android.intent.action.SCREEN_ON");
+
+        receiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String act = intent.getAction();
+                if(act.equals("android.intent.action.SCREEN_OFF")) {
+                    Toast.makeText(getApplicationContext(), "SCREEN_OFF", Toast.LENGTH_LONG).show();
+                    Log.d("Receiver", "SCREEN_OFF");
+                } else {
+                    Toast.makeText(getApplicationContext(), "SCREEN_ON", Toast.LENGTH_LONG).show();
+                    Log.d("Receiver", "SCREEN_ON");
+                }
+            }
+        };
+
+        registerReceiver(receiver, filter);
+        flag = 1;
 
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -106,6 +188,17 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View view) {
                 Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
                         .setAction("Action", null).show();
+                if(flag == 1) {
+                    unregisterReceiver(receiver);
+                    flag = 0;
+                } else {
+                    IntentFilter filter = new IntentFilter();
+                    filter.addAction("android.intent.action.SCREEN_OFF");
+                    filter.addAction("android.intent.action.SCREEN_ON");
+                    registerReceiver(receiver, filter);
+                    flag = 1;
+                }
+
             }
         });
     }
@@ -120,6 +213,12 @@ public class MainActivity extends AppCompatActivity {
         } else {
             return data+" B";
         }
+    }
+
+    private boolean checkForPermission() {
+        AppOpsManager appOps = (AppOpsManager) getSystemService(Context.APP_OPS_SERVICE);
+        int mode = appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), getPackageName());
+        return mode == MODE_ALLOWED;
     }
 
     @Override
